@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracker</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+
+
+        .streak-info {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .streak-number {
+            font-size: 4rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .streak-label {
+            font-size: 1.5rem;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+
+
+        .calendar-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+
+
+
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+
+        .calendar-header {
+            text-align: center;
+            font-weight: bold;
+            color: #667eea;
+            padding: 8px 2px;
+            font-size: 12px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .calendar-day {
+            height: 35px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            font-size: 14px;
+            border: 1px solid transparent;
+        }
+
+        .calendar-day:hover:not(.empty) {
+            transform: scale(1.05);
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        }
+
+        .calendar-day.empty {
+            background: transparent;
+            cursor: default;
+        }
+
+        .calendar-day.future-date {
+            color: #ccc;
+            background: #f8f9fa;
+        }
+
+        .calendar-day.today {
+            background: #667eea;
+            color: white;
+            font-weight: bold;
+            transform: scale(1.1);
+        }
+
+        .calendar-day.streak {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+        }
+
+        .calendar-day.failed {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+        }
+
+
+
+
+
+
+
+        .months-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            padding: 20px 0;
+        }
+
+        .month-card {
+            background: white;
+            border-radius: 15px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            width: 100%;
+            min-height: 280px;
+        }
+
+        .month-title {
+            text-align: center;
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+            padding: 8px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 8px;
+            border-bottom: 3px solid #667eea;
+        }
+
+
+
+        @media (max-width: 1200px) {
+            .months-container {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        @media (max-width: 900px) {
+            .months-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .months-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .streak-number {
+                font-size: 3rem;
+            }
+            
+            .month-card {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+
+
+        <div class="streak-info">
+            <div class="streak-number" id="streakNumber">0</div>
+            <div class="streak-label" id="streakLabel">Days Strong</div>
+        </div>
+
+        <div class="calendar-container">
+            <div style="text-align: center; margin-bottom: 20px; color: #666; font-size: 14px;">
+                📊 View-only calendar - Use the CLI tool to modify days
+            </div>
+            <div class="months-container" id="monthsContainer">
+                <!-- Calendar months will be populated here -->
+            </div>
+        </div>
+
+
+    </div>
+
+    <script>
+        let streakData = null;
+        let currentStreak = 0;
+
+
+        async function loadStreakData() {
+            try {
+                const response = await fetch('/api/streak');
+                streakData = await response.json();
+                
+                // Load marked days from database
+                await loadMarkedDays();
+                
+                // Calculate streak from marked days
+                currentStreak = Object.values(markedDays).filter(status => status === 'successful').length;
+                document.getElementById('streakNumber').textContent = currentStreak;
+                updateStreakLabel();
+                
+                renderCalendar();
+            } catch (error) {
+                console.error('Error loading streak data:', error);
+            }
+        }
+
+
+
+        function updateStreakLabel() {
+            const label = document.getElementById('streakLabel');
+            if (currentStreak === 1) {
+                label.textContent = 'Day Strong';
+            } else {
+                label.textContent = 'Days Strong';
+            }
+        }
+
+        let markedDays = {}; // Store the state of marked days
+
+        async function loadMarkedDays() {
+            try {
+                const response = await fetch('/api/marked-days');
+                markedDays = await response.json();
+            } catch (error) {
+                console.error('Error loading marked days:', error);
+                markedDays = {};
+            }
+        }
+
+
+
+        function renderCalendar() {
+            if (!streakData) return;
+            
+            const container = document.getElementById('monthsContainer');
+            container.innerHTML = '';
+            
+            streakData.months_data.forEach((monthData, index) => {
+                const monthCard = createMonthCard(monthData, index);
+                container.appendChild(monthCard);
+            });
+        }
+
+        function createMonthCard(monthData, index) {
+            const monthCard = document.createElement('div');
+            monthCard.className = 'month-card';
+            
+            const monthTitle = document.createElement('div');
+            monthTitle.className = 'month-title';
+            monthTitle.textContent = `${monthData.month_name} ${monthData.year}`;
+            monthCard.appendChild(monthTitle);
+            
+            const calendarGrid = document.createElement('div');
+            calendarGrid.className = 'calendar-grid';
+            
+            // Add day headers
+            ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(day => {
+                const header = document.createElement('div');
+                header.className = 'calendar-header';
+                header.textContent = day;
+                calendarGrid.appendChild(header);
+            });
+            
+            // Add calendar days
+            monthData.calendar.forEach(week => {
+                week.forEach(day => {
+                    const dayElement = document.createElement('div');
+                    dayElement.className = 'calendar-day';
+                    
+                    if (day === 0) {
+                        dayElement.className += ' empty';
+                    } else {
+                        dayElement.textContent = day;
+                        
+                        const currentDate = new Date(monthData.year, monthData.month - 1, day);
+                        const today = new Date();
+                        
+                        // Check if this is today
+                        if (currentDate.toDateString() === today.toDateString()) {
+                            dayElement.className += ' today';
+                        }
+                        
+                        // Check if this is a future date
+                        if (currentDate > today) {
+                            dayElement.className += ' future-date';
+                        }
+                        // All past and current dates are view-only
+                        else {
+                            // Apply saved state if it exists
+                            const dateKey = currentDate.toISOString().split('T')[0];
+                            if (markedDays[dateKey]) {
+                                if (markedDays[dateKey] === 'successful') {
+                                    dayElement.classList.add('streak');
+                                } else if (markedDays[dateKey] === 'unsuccessful') {
+                                    dayElement.classList.add('failed');
+                                }
+                            }
+                        }
+                    }
+                    
+                    calendarGrid.appendChild(dayElement);
+                });
+            });
+            
+            monthCard.appendChild(calendarGrid);
+            return monthCard;
+        }
+
+
+
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', loadStreakData);
+    </script>
+</body>
+</html>
