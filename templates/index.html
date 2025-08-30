@@ -235,8 +235,8 @@
                 // Load marked days from database
                 await loadMarkedDays();
                 
-                // Calculate streak from marked days
-                currentStreak = Object.values(markedDays).filter(status => status === 'successful').length;
+                // Use the streak value from the backend API
+                currentStreak = streakData.current_streak;
                 document.getElementById('streakNumber').textContent = currentStreak;
                 updateStreakLabel();
                 

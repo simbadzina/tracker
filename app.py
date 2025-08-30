@@ -34,9 +34,48 @@ def get_streak():
     # Calculate days since start
     days_since_start = (today - START_DATE).days
     
-    # Calculate current streak (days since start)
-    # For now, assuming no relapses since start
-    current_streak = max(0, days_since_start)
+    # Get marked days from DynamoDB to calculate actual streak
+    try:
+        table = dynamodb.Table(TABLE_NAME)
+        response = table.scan()
+        
+        marked_days = {}
+        for item in response['Items']:
+            marked_days[item['date']] = item['status']
+        
+        # Calculate current streak based on marked days
+        current_streak = 0
+        if days_since_start >= 0:
+            # First check if today is marked - if not marked or marked as failure, streak is 0
+            today_str = today.strftime('%Y-%m-%d')
+            
+            if today_str not in marked_days or marked_days[today_str] == 'failure':
+                current_streak = 0
+            else:
+                # Today is marked as success, so count backwards from yesterday
+                current_date = today - timedelta(days=1)
+                while current_date >= START_DATE:
+                    date_str = current_date.strftime('%Y-%m-%d')
+                    
+                    if date_str in marked_days:
+                        if marked_days[date_str] == 'success':
+                            current_streak += 1
+                        elif marked_days[date_str] == 'failure':
+                            # If we hit a failure, streak is broken
+                            break
+                    else:
+                        # If day is not marked, assume it's a failure (streak broken)
+                        break
+                    
+                    current_date -= timedelta(days=1)
+                
+                # Add 1 for today since it's marked as success
+                current_streak += 1
+        
+    except Exception as e:
+        print(f"Error getting marked days for streak calculation: {e}")
+        # Fallback to days since start if DynamoDB fails
+        current_streak = max(0, days_since_start)
     
     # Get calendar data for the next 12 months starting from August 2025
     months_data = []
@@ -44,7 +83,7 @@ def get_streak():
     start_month = START_DATE.month  # August = 8
     
     # Show exactly 12 months
-    for i in range(12):
+    for i in range(13):
         # Calculate the year and month for this iteration
         current_year = start_year + ((start_month + i - 1) // 12)
         current_month = ((start_month + i - 1) % 12) + 1
