@@ -9,6 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
+ENV PORT=8000
 
 # Install system dependencies
 RUN apt-get update \
@@ -35,12 +36,12 @@ RUN adduser --disabled-password --gecos '' appuser \
 # Switch to non-root user
 USER appuser
 
-# Expose port (using higher port number that non-root users can bind to)
-EXPOSE 8000
+# Expose port (using environment variable for flexibility)
+EXPOSE $PORT
 
-# Health check (using Python instead of curl to avoid permission issues)
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')" || exit 1
+# Health check (simplified to avoid permission issues)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:$PORT/health')" || exit 1
 
 # Run the application with Gunicorn for production
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120", "app:app"]
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --access-logfile - --error-logfile - app:app

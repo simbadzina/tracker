@@ -27,6 +27,11 @@ START_DATE = date(2025, 8, 26)
 def index():
     return render_template('index.html')
 
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Docker and load balancers"""
+    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()}), 200
+
 @app.route('/api/streak')
 def get_streak():
     today = date.today()
