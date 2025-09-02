@@ -53,7 +53,7 @@ def get_streak():
         if days_since_start >= 0:
             today_str = today.strftime('%Y-%m-%d')
             
-            # Find the most recent successful day
+            # Find the most recent successful day (but only up to today)
             most_recent_success = None
             current_date = today
             
@@ -73,8 +73,9 @@ def get_streak():
             
             if most_recent_success:
                 # Calculate streak from the most recent successful day backwards
+                # But only count days up to today (don't count future dates)
                 streak_date = most_recent_success
-                while streak_date >= START_DATE:
+                while streak_date >= START_DATE and streak_date <= today:
                     date_str = streak_date.strftime('%Y-%m-%d')
                     
                     if date_str in marked_days:
