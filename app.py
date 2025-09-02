@@ -51,31 +51,44 @@ def get_streak():
         # Calculate current streak based on marked days
         current_streak = 0
         if days_since_start >= 0:
-            # First check if today is marked - if not marked or marked as failure, streak is 0
             today_str = today.strftime('%Y-%m-%d')
             
-            if today_str not in marked_days or marked_days[today_str] == 'failure':
-                current_streak = 0
-            else:
-                # Today is marked as success, so count backwards from yesterday
-                current_date = today - timedelta(days=1)
-                while current_date >= START_DATE:
-                    date_str = current_date.strftime('%Y-%m-%d')
+            # Find the most recent successful day
+            most_recent_success = None
+            current_date = today
+            
+            # Look backwards from today to find the most recent successful day
+            while current_date >= START_DATE:
+                date_str = current_date.strftime('%Y-%m-%d')
+                
+                if date_str in marked_days:
+                    if marked_days[date_str] == 'successful':
+                        most_recent_success = current_date
+                        break
+                    elif marked_days[date_str] == 'unsuccessful':
+                        # If we hit an unsuccessful day, streak is broken
+                        break
+                
+                current_date -= timedelta(days=1)
+            
+            if most_recent_success:
+                # Calculate streak from the most recent successful day backwards
+                streak_date = most_recent_success
+                while streak_date >= START_DATE:
+                    date_str = streak_date.strftime('%Y-%m-%d')
                     
                     if date_str in marked_days:
-                        if marked_days[date_str] == 'success':
+                        if marked_days[date_str] == 'successful':
                             current_streak += 1
-                        elif marked_days[date_str] == 'failure':
-                            # If we hit a failure, streak is broken
+                        elif marked_days[date_str] == 'unsuccessful':
+                            # If we hit an unsuccessful day, streak is broken
                             break
                     else:
-                        # If day is not marked, assume it's a failure (streak broken)
+                        # If day is not marked, don't assume it's a failure
+                        # Just stop counting (this preserves partial streaks)
                         break
                     
-                    current_date -= timedelta(days=1)
-                
-                # Add 1 for today since it's marked as success
-                current_streak += 1
+                    streak_date -= timedelta(days=1)
         
     except Exception as e:
         print(f"Error getting marked days for streak calculation: {e}")
