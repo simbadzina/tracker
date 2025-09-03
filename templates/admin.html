@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tracker</title>
+    <title>Tracker - Admin</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
@@ -24,8 +24,6 @@
             margin: 0 auto;
             padding: 20px;
         }
-
-
 
         .streak-info {
             background: rgba(255, 255, 255, 0.95);
@@ -49,18 +47,12 @@
             margin-bottom: 20px;
         }
 
-
-
         .calendar-container {
             background: rgba(255, 255, 255, 0.95);
             border-radius: 20px;
             padding: 30px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
-
-
-
-
 
         .calendar-grid {
             display: grid;
@@ -97,9 +89,15 @@
             border: 1px solid transparent;
         }
 
+        .calendar-day.clickable {
+            cursor: pointer;
+        }
 
-
-
+        .calendar-day.clickable:hover {
+            transform: scale(1.05);
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        }
 
         .calendar-day.empty {
             background: transparent;
@@ -109,6 +107,7 @@
         .calendar-day.future-date {
             color: #ccc;
             background: #f8f9fa;
+            cursor: not-allowed;
         }
 
         .calendar-day.today {
@@ -131,12 +130,6 @@
             font-weight: bold;
             box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
         }
-
-
-
-
-
-
 
         .months-container {
             display: grid;
@@ -166,7 +159,17 @@
             border-bottom: 3px solid #667eea;
         }
 
-
+        .admin-badge {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            display: inline-block;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+        }
 
         @media (max-width: 1200px) {
             .months-container {
@@ -185,10 +188,6 @@
                 grid-template-columns: 1fr;
             }
             
-            .header h1 {
-                font-size: 2rem;
-            }
-            
             .streak-number {
                 font-size: 3rem;
             }
@@ -201,29 +200,25 @@
 </head>
 <body>
     <div class="container">
-
-
         <div class="streak-info">
+            <div class="admin-badge">🔧 ADMIN MODE</div>
             <div class="streak-number" id="streakNumber">0</div>
             <div class="streak-label" id="streakLabel">Days Strong</div>
         </div>
 
         <div class="calendar-container">
             <div style="text-align: center; margin-bottom: 20px; color: #666; font-size: 14px;">
-                📊 View-only calendar - Use the CLI tool to modify days
+                📊 Interactive calendar - Click on any day to toggle its state (unmarked → successful → unsuccessful → unmarked)
             </div>
             <div class="months-container" id="monthsContainer">
                 <!-- Calendar months will be populated here -->
             </div>
         </div>
-
-
     </div>
 
     <script>
         let streakData = null;
         let currentStreak = 0;
-
 
         async function loadStreakData() {
             try {
@@ -243,8 +238,6 @@
                 console.error('Error loading streak data:', error);
             }
         }
-
-
 
         function updateStreakLabel() {
             const label = document.getElementById('streakLabel');
@@ -267,9 +260,67 @@
             }
         }
 
+        async function handleDayClick(event) {
+            const dayElement = event.target;
+            const dateStr = dayElement.dataset.date;
+            
+            if (!dateStr) return;
+            
+            // Determine current status
+            let currentStatus = 'unmarked';
+            if (dayElement.classList.contains('streak')) {
+                currentStatus = 'successful';
+            } else if (dayElement.classList.contains('failed')) {
+                currentStatus = 'unsuccessful';
+            }
+            
+            try {
+                const response = await fetch('/api/toggle-day', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        date: dateStr,
+                        current_status: currentStatus
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    // Update local state
+                    if (result.status === 'unmarked') {
+                        delete markedDays[dateStr];
+                    } else {
+                        markedDays[dateStr] = result.status;
+                    }
+                    
+                    // Update UI
+                    updateDayElement(dayElement, result.status);
+                    
+                    // Reload streak data to update the counter
+                    await loadStreakData();
+                } else {
+                    console.error('Failed to toggle day:', await response.text());
+                }
+            } catch (error) {
+                console.error('Error toggling day:', error);
+            }
+        }
 
-
-
+        function updateDayElement(dayElement, status) {
+            // Remove existing status classes
+            dayElement.classList.remove('streak', 'failed');
+            
+            // Add new status class
+            if (status === 'successful') {
+                dayElement.classList.add('streak');
+            } else if (status === 'unsuccessful') {
+                dayElement.classList.add('failed');
+            }
+            // If status is 'unmarked', no additional class is added
+        }
 
         function renderCalendar() {
             if (!streakData) return;
@@ -326,8 +377,11 @@
                         if (currentDate > today) {
                             dayElement.className += ' future-date';
                         }
-                        // All past and current dates are view-only
+                        // All past and current dates are clickable
                         else {
+                            dayElement.className += ' clickable';
+                            dayElement.dataset.date = currentDate.toISOString().split('T')[0];
+                            
                             // Apply saved state if it exists
                             const dateKey = currentDate.toISOString().split('T')[0];
                             if (markedDays[dateKey]) {
@@ -337,6 +391,9 @@
                                     dayElement.classList.add('failed');
                                 }
                             }
+                            
+                            // Add click event listener
+                            dayElement.addEventListener('click', handleDayClick);
                         }
                     }
                     
@@ -347,8 +404,6 @@
             monthCard.appendChild(calendarGrid);
             return monthCard;
         }
-
-
 
         // Load data when page loads
         document.addEventListener('DOMContentLoaded', loadStreakData);

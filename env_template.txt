@@ -8,4 +8,9 @@ AWS_SECRET_ACCESS_KEY=your_secret_key_here
 # DynamoDB Table Name
 DYNAMODB_TABLE=tracker
 
+# Admin Page Path (secret URL for interactive calendar)
+# REQUIRED: Set this to any path you want for security
+# Example: ADMIN_PATH=secret-admin-panel
+ADMIN_PATH=your-secret-path-here
+
 

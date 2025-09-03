@@ -20,12 +20,25 @@ dynamodb = boto3.resource('dynamodb',
 # Table name for storing marked days
 TABLE_NAME = os.getenv('DYNAMODB_TABLE', 'tracker')
 
+# Admin page path (configurable via environment variable)
+ADMIN_PATH = os.getenv('ADMIN_PATH')
+
 # Start date for the streak
 START_DATE = date(2025, 8, 26)
+
+# Check if admin path is configured
+if not ADMIN_PATH:
+    raise ValueError("ADMIN_PATH environment variable must be set")
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+def admin():
+    return render_template('admin.html')
+
+# Register the admin route dynamically
+app.add_url_rule(f'/{ADMIN_PATH}', 'admin', admin)
 
 @app.route('/health')
 def health_check():
@@ -142,6 +155,62 @@ def get_marked_days():
     except Exception as e:
         print(f"Error getting marked days: {e}")
         return jsonify({}), 500
+
+@app.route('/api/toggle-day', methods=['POST'])
+def toggle_day():
+    """Toggle the state of a specific day"""
+    from flask import request
+    
+    try:
+        data = request.get_json()
+        date_str = data.get('date')
+        current_status = data.get('current_status', 'unmarked')
+        
+        if not date_str:
+            return jsonify({'error': 'Date is required'}), 400
+        
+        # Validate date format
+        try:
+            datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+        
+        table = dynamodb.Table(TABLE_NAME)
+        
+        # Determine next status based on current status
+        if current_status == 'unmarked':
+            next_status = 'successful'
+        elif current_status == 'successful':
+            next_status = 'unsuccessful'
+        elif current_status == 'unsuccessful':
+            next_status = 'unmarked'
+        else:
+            next_status = 'successful'  # Default fallback
+        
+        if next_status == 'unmarked':
+            # Remove the item from DynamoDB
+            try:
+                table.delete_item(Key={'date': date_str})
+            except Exception as e:
+                print(f"Error deleting item: {e}")
+                # Continue even if delete fails (item might not exist)
+        else:
+            # Add or update the item in DynamoDB
+            table.put_item(Item={
+                'date': date_str,
+                'status': next_status,
+                'updated_at': datetime.now().isoformat()
+            })
+        
+        return jsonify({
+            'date': date_str,
+            'status': next_status,
+            'message': f'Day {date_str} set to {next_status}'
+        })
+        
+    except Exception as e:
+        print(f"Error toggling day: {e}")
+        return jsonify({'error': 'Failed to toggle day'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
