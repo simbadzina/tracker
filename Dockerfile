@@ -1,5 +1,19 @@
-# Use Python 3.11 slim image for smaller size
-FROM python:3.11-slim
+# Multi-stage build for maximum optimization
+FROM python:3.11-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache --virtual .build-deps \
+        gcc \
+        musl-dev
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip cache purge
+
+# Final stage - minimal runtime image
+FROM python:3.11-alpine
 
 # Set working directory
 WORKDIR /app
@@ -11,37 +25,16 @@ ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
 ENV PORT=8000
 
-# Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        gcc \
-        g++ \
-        curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first for better caching
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+# Copy only the installed packages from builder stage
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
 COPY . .
 
-# Create non-root user for security
-RUN adduser --disabled-password --gecos '' appuser \
-    && chown -R appuser:appuser /app
-
-# Switch to non-root user
-USER appuser
-
-# Expose port (using environment variable for flexibility)
+# Expose port
 EXPOSE $PORT
 
-# Health check (simplified to avoid permission issues)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:$PORT/health')" || exit 1
-
-# Run the application with Gunicorn for production
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --access-logfile - --error-logfile - app:app
+# Run as root for simplicity (single user deployment)
+# Use single worker, minimal timeout, and no logging for fastest startup
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 10 --preload app:app
