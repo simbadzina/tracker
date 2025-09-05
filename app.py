@@ -61,10 +61,26 @@ def get_streak():
         for item in response['Items']:
             marked_days[item['date']] = item['status']
         
-        # Calculate current streak based on marked days
+        # Calculate current streak and success rate based on marked days
         current_streak = 0
+        successful_days = 0
+        unsuccessful_days = 0
+        
         if days_since_start >= 0:
             today_str = today.strftime('%Y-%m-%d')
+            
+            # Count successful and unsuccessful days
+            current_date = START_DATE
+            while current_date <= today:
+                date_str = current_date.strftime('%Y-%m-%d')
+                
+                if date_str in marked_days:
+                    if marked_days[date_str] == 'successful':
+                        successful_days += 1
+                    elif marked_days[date_str] == 'unsuccessful':
+                        unsuccessful_days += 1
+                
+                current_date += timedelta(days=1)
             
             # Find the most recent successful day (but only up to today)
             most_recent_success = None
@@ -108,6 +124,15 @@ def get_streak():
         print(f"Error getting marked days for streak calculation: {e}")
         # Fallback to days since start if DynamoDB fails
         current_streak = max(0, days_since_start)
+        successful_days = 0
+        unsuccessful_days = 0
+    
+    # Calculate success rate percentage
+    total_marked_days = successful_days + unsuccessful_days
+    if total_marked_days > 0:
+        success_rate = round((successful_days / total_marked_days) * 100, 1)
+    else:
+        success_rate = 0.0
     
     # Get calendar data for the next 12 months starting from August 2025
     months_data = []
@@ -136,6 +161,10 @@ def get_streak():
         'start_date': START_DATE.strftime('%Y-%m-%d'),
         'current_streak': current_streak,
         'days_since_start': days_since_start,
+        'success_rate': success_rate,
+        'successful_days': successful_days,
+        'unsuccessful_days': unsuccessful_days,
+        'total_marked_days': total_marked_days,
         'months_data': months_data,
         'today': today.strftime('%Y-%m-%d')
     })

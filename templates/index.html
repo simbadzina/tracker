@@ -46,6 +46,13 @@
         .streak-label {
             font-size: 1.5rem;
             color: #666;
+            margin-bottom: 10px;
+        }
+
+        .success-rate {
+            font-size: 1.2rem;
+            color: #4CAF50;
+            font-weight: 600;
             margin-bottom: 20px;
         }
 
@@ -206,6 +213,7 @@
         <div class="streak-info">
             <div class="streak-number" id="streakNumber">0</div>
             <div class="streak-label" id="streakLabel">Days Strong</div>
+            <div class="success-rate" id="successRate">0% Success Rate</div>
         </div>
 
         <div class="calendar-container">
@@ -237,6 +245,10 @@
                 currentStreak = streakData.current_streak;
                 document.getElementById('streakNumber').textContent = currentStreak;
                 updateStreakLabel();
+                
+                // Update success rate
+                const successRate = streakData.success_rate || 0;
+                document.getElementById('successRate').textContent = `${successRate}% Success Rate`;
                 
                 renderCalendar();
             } catch (error) {
