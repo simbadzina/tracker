@@ -75,6 +75,9 @@
             gap: 2px;
             margin-bottom: 20px;
             width: 100%;
+            /* Performance optimizations */
+            contain: layout style paint;
+            will-change: contents;
         }
 
         .calendar-header {
@@ -102,6 +105,9 @@
             position: relative;
             font-size: 14px;
             border: 1px solid transparent;
+            /* Performance optimizations */
+            will-change: transform, background-color;
+            transform: translateZ(0); /* Force hardware acceleration */
         }
 
 
@@ -132,11 +138,27 @@
             box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
         }
 
+        .calendar-day.today.streak {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
+            transform: scale(1.1);
+        }
+
         .calendar-day.failed {
             background: linear-gradient(135deg, #ff6b6b, #ee5a52);
             color: white;
             font-weight: bold;
             box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+        }
+
+        .calendar-day.today.failed {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+            transform: scale(1.1);
         }
 
 
@@ -159,6 +181,9 @@
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
             width: 100%;
             min-height: 280px;
+            /* Performance optimizations */
+            contain: layout style paint;
+            will-change: transform;
         }
 
         .month-title {
@@ -235,11 +260,14 @@
 
         async function loadStreakData() {
             try {
+                // Show loading state
+                showLoadingState();
+                
                 const response = await fetch('/api/streak');
                 streakData = await response.json();
                 
-                // Load marked days from database
-                await loadMarkedDays();
+                // Marked days are now included in the streak response, no need for separate API call
+                markedDays = streakData.marked_days || {};
                 
                 // Use the streak value from the backend API
                 currentStreak = streakData.current_streak;
@@ -250,10 +278,23 @@
                 const successRate = streakData.success_rate || 0;
                 document.getElementById('successRate').textContent = `${successRate}% Success Rate`;
                 
-                renderCalendar();
+                // Render calendar with progressive loading
+                await renderCalendarProgressive();
+                
+                hideLoadingState();
             } catch (error) {
                 console.error('Error loading streak data:', error);
+                hideLoadingState();
             }
+        }
+
+        function showLoadingState() {
+            const container = document.getElementById('monthsContainer');
+            container.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;">Loading calendar...</div>';
+        }
+
+        function hideLoadingState() {
+            // Loading state will be replaced by calendar content
         }
 
 
@@ -269,19 +310,45 @@
 
         let markedDays = {}; // Store the state of marked days
 
-        async function loadMarkedDays() {
-            try {
-                const response = await fetch('/api/marked-days');
-                markedDays = await response.json();
-            } catch (error) {
-                console.error('Error loading marked days:', error);
-                markedDays = {};
+
+
+
+
+        async function renderCalendarProgressive() {
+            if (!streakData) return;
+            
+            const container = document.getElementById('monthsContainer');
+            container.innerHTML = '';
+            
+            // Use document fragment for better performance
+            const fragment = document.createDocumentFragment();
+            
+            // Process months in batches to avoid blocking the UI
+            const batchSize = 3;
+            const months = streakData.months_data;
+            
+            for (let i = 0; i < months.length; i += batchSize) {
+                const batch = months.slice(i, i + batchSize);
+                
+                // Create month cards for this batch
+                const batchPromises = batch.map((monthData, index) => 
+                    createMonthCardOptimized(monthData, i + index)
+                );
+                
+                const monthCards = await Promise.all(batchPromises);
+                
+                // Append to fragment
+                monthCards.forEach(card => fragment.appendChild(card));
+                
+                // Append current batch to DOM
+                container.appendChild(fragment.cloneNode(true));
+                
+                // Small delay to allow UI to update
+                if (i + batchSize < months.length) {
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
             }
         }
-
-
-
-
 
         function renderCalendar() {
             if (!streakData) return;
@@ -292,6 +359,87 @@
             streakData.months_data.forEach((monthData, index) => {
                 const monthCard = createMonthCard(monthData, index);
                 container.appendChild(monthCard);
+            });
+        }
+
+        function createMonthCardOptimized(monthData, index) {
+            return new Promise((resolve) => {
+                // Use requestAnimationFrame to avoid blocking the main thread
+                requestAnimationFrame(() => {
+                    const monthCard = document.createElement('div');
+                    monthCard.className = 'month-card';
+                    
+                    const monthTitle = document.createElement('div');
+                    monthTitle.className = 'month-title';
+                    monthTitle.textContent = `${monthData.month_name} ${monthData.year}`;
+                    monthCard.appendChild(monthTitle);
+                    
+                    const calendarGrid = document.createElement('div');
+                    calendarGrid.className = 'calendar-grid';
+                    
+                    // Pre-create day headers array for better performance
+                    const dayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                    const headerElements = dayHeaders.map(day => {
+                        const header = document.createElement('div');
+                        header.className = 'calendar-header';
+                        header.textContent = day;
+                        return header;
+                    });
+                    
+                    // Use append with spread operator for better performance
+                    calendarGrid.append(...headerElements);
+                    
+                    // Pre-calculate today for comparison
+                    const today = new Date();
+                    const todayString = today.toDateString();
+                    
+                    // Create all day elements at once
+                    const dayElements = [];
+                    monthData.calendar.forEach(week => {
+                        week.forEach(day => {
+                            const dayElement = document.createElement('div');
+                            dayElement.className = 'calendar-day';
+                            
+                            if (day === 0) {
+                                dayElement.className += ' empty';
+                            } else {
+                                dayElement.textContent = day;
+                                
+                                const currentDate = new Date(monthData.year, monthData.month - 1, day);
+                                
+                                // Check if this is a future date
+                                if (currentDate > today) {
+                                    dayElement.className += ' future-date';
+                                }
+                                // All past and current dates (including today) are view-only
+                                else {
+                                    // Check if this is today
+                                    if (currentDate.toDateString() === todayString) {
+                                        dayElement.className += ' today';
+                                    }
+                                    
+                                    // Apply saved state if it exists
+                                    const dateKey = currentDate.toISOString().split('T')[0];
+                                    if (markedDays[dateKey]) {
+                                        if (markedDays[dateKey] === 'successful') {
+                                            dayElement.classList.add('streak');
+                                        } else if (markedDays[dateKey] === 'unsuccessful') {
+                                            dayElement.classList.add('failed');
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            dayElements.push(dayElement);
+                        });
+                    });
+                    
+                    // Append all day elements at once
+                    calendarGrid.append(...dayElements);
+                    monthCard.appendChild(calendarGrid);
+                    
+                    resolve(monthCard);
+                });
             });
         }
 
@@ -329,17 +477,17 @@
                         const currentDate = new Date(monthData.year, monthData.month - 1, day);
                         const today = new Date();
                         
-                        // Check if this is today
-                        if (currentDate.toDateString() === today.toDateString()) {
-                            dayElement.className += ' today';
-                        }
-                        
                         // Check if this is a future date
                         if (currentDate > today) {
                             dayElement.className += ' future-date';
                         }
-                        // All past and current dates are view-only
+                        // All past and current dates (including today) are view-only
                         else {
+                            // Check if this is today
+                            if (currentDate.toDateString() === today.toDateString()) {
+                                dayElement.className += ' today';
+                            }
+                            
                             // Apply saved state if it exists
                             const dateKey = currentDate.toISOString().split('T')[0];
                             if (markedDays[dateKey]) {
