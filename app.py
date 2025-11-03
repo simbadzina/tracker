@@ -62,9 +62,10 @@ def get_cached_marked_days():
         print(f"Error getting marked days: {e}")
         return {}
 
-@lru_cache(maxsize=1)
-def get_calendar_data():
-    """Cache calendar data generation (only changes once per day)"""
+@lru_cache(maxsize=32)
+def get_calendar_data(today_key):
+    """Cache calendar data generation (only changes once per day)
+    today_key is a string representation of today's date for cache invalidation"""
     months_data = []
     start_year = START_DATE.year
     start_month = START_DATE.month  # August = 8
@@ -196,8 +197,8 @@ def get_streak():
     else:
         success_rate = 0.0
     
-    # Get cached calendar data
-    months_data = get_calendar_data()
+    # Get cached calendar data (pass today's date as cache key)
+    months_data = get_calendar_data(today.strftime('%Y-%m-%d'))
     
     return jsonify({
         'start_date': START_DATE.strftime('%Y-%m-%d'),

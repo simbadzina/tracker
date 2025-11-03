@@ -320,9 +320,6 @@
             const container = document.getElementById('monthsContainer');
             container.innerHTML = '';
             
-            // Use document fragment for better performance
-            const fragment = document.createDocumentFragment();
-            
             // Process months in batches to avoid blocking the UI
             const batchSize = 3;
             const months = streakData.months_data;
@@ -337,11 +334,8 @@
                 
                 const monthCards = await Promise.all(batchPromises);
                 
-                // Append to fragment
-                monthCards.forEach(card => fragment.appendChild(card));
-                
-                // Append current batch to DOM
-                container.appendChild(fragment.cloneNode(true));
+                // Append current batch directly to DOM
+                monthCards.forEach(card => container.appendChild(card));
                 
                 // Small delay to allow UI to update
                 if (i + batchSize < months.length) {
