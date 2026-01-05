@@ -26,7 +26,7 @@ TABLE_NAME = os.getenv('DYNAMODB_TABLE', 'tracker')
 ADMIN_PATH = os.getenv('ADMIN_PATH')
 
 # Start date for the streak
-START_DATE = date(2025, 8, 26)
+START_DATE = date(2026, 1, 1)
 
 # Check if admin path is configured
 if not ADMIN_PATH:
@@ -86,8 +86,8 @@ def get_calendar_data(today_key):
     # Ensure we show at least 1 month
     months_to_show = max(1, months_to_show)
     
-    # Show months up to current month only, in reverse order (latest first)
-    for i in range(months_to_show - 1, -1, -1):
+    # Show months up to current month only
+    for i in range(0, months_to_show):
         # Calculate the year and month for this iteration
         year = start_year + ((start_month + i - 1) // 12)
         month = ((start_month + i - 1) % 12) + 1
