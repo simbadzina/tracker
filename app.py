@@ -26,7 +26,7 @@ TABLE_NAME = os.getenv('DYNAMODB_TABLE', 'tracker')
 ADMIN_PATH = os.getenv('ADMIN_PATH')
 
 # Start date for the streak
-START_DATE = date(2026, 1, 1)
+START_DATE = date(2026, 6, 1)
 
 # Check if admin path is configured
 if not ADMIN_PATH:
