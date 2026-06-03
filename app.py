@@ -1,16 +1,66 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, session, redirect, request, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import datetime, date, timedelta
 import calendar
 import boto3
 import os
+import secrets
+import requests
 from dotenv import load_dotenv
-from functools import lru_cache
+from functools import lru_cache, wraps
 import json
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
+
+# Behind one reverse proxy (Caddy on the Pi). Trust X-Forwarded-Proto/Host so Flask builds
+# https URLs and marks the session cookie correctly.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+# Session / cookie config for the Google-login flow
+app.secret_key = os.getenv('SECRET_KEY', 'dev-only-insecure-key-change-me')
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+)
+
+# Google OAuth (OIDC) configuration
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
+GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:5000/callback')
+GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
+GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
+GOOGLE_USERINFO_ENDPOINT = 'https://www.googleapis.com/oauth2/v2/userinfo'
+
+# Allowlist of Google accounts permitted to edit (comma-separated emails, case-insensitive)
+ALLOWED_EMAILS = {
+    e.strip().lower() for e in os.getenv('ALLOWED_EMAILS', '').split(',') if e.strip()
+}
+
+
+def current_email():
+    """Email of the signed-in user, or None."""
+    return session.get('email')
+
+
+def is_admin():
+    """True when the signed-in user is on the allowlist (i.e. may edit)."""
+    email = current_email()
+    return bool(email) and email.lower() in ALLOWED_EMAILS
+
+
+def admin_required(f):
+    """Guard write endpoints: 401 JSON unless the session is an allowed account."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not is_admin():
+            return jsonify({'error': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    return wrapper
 
 # DynamoDB configuration
 dynamodb = boto3.resource('dynamodb',
@@ -22,15 +72,8 @@ dynamodb = boto3.resource('dynamodb',
 # Table name for storing marked days
 TABLE_NAME = os.getenv('DYNAMODB_TABLE', 'tracker')
 
-# Admin page path (configurable via environment variable)
-ADMIN_PATH = os.getenv('ADMIN_PATH')
-
 # Start date for the streak
 START_DATE = date(2026, 6, 1)
-
-# Check if admin path is configured
-if not ADMIN_PATH:
-    raise ValueError("ADMIN_PATH environment variable must be set")
 
 # Cache for marked days data (in-memory cache with TTL)
 _marked_days_cache = {}
@@ -108,13 +151,75 @@ def get_calendar_data(today_key):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    # is_admin drives whether the page renders the calendar as editable.
+    return render_template('index.html', is_admin=is_admin())
 
-def admin():
-    return render_template('admin.html')
 
-# Register the admin route dynamically
-app.add_url_rule(f'/{ADMIN_PATH}', 'admin', admin)
+@app.route('/login')
+def login():
+    if not GOOGLE_CLIENT_ID:
+        return 'Google login is not configured (set GOOGLE_CLIENT_ID).', 503
+    state = secrets.token_urlsafe(16)
+    session['oauth_state'] = state
+    auth_url = (
+        f'{GOOGLE_AUTH_ENDPOINT}?response_type=code'
+        f'&client_id={GOOGLE_CLIENT_ID}'
+        f'&redirect_uri={GOOGLE_REDIRECT_URI}'
+        '&scope=openid%20email'
+        '&prompt=select_account'
+        f'&state={state}'
+    )
+    return redirect(auth_url)
+
+
+@app.route('/callback')
+def callback():
+    # CSRF protection: the state must match what we issued in /login.
+    if not request.args.get('state') or request.args.get('state') != session.pop('oauth_state', None):
+        return 'Invalid OAuth state', 400
+
+    code = request.args.get('code')
+    if not code:
+        return redirect(url_for('index'))
+
+    # Exchange the authorization code for tokens, server-to-server over TLS.
+    token_resp = requests.post(GOOGLE_TOKEN_ENDPOINT, data={
+        'client_id': GOOGLE_CLIENT_ID,
+        'client_secret': GOOGLE_CLIENT_SECRET,
+        'code': code,
+        'grant_type': 'authorization_code',
+        'redirect_uri': GOOGLE_REDIRECT_URI,
+    }, timeout=10)
+    if token_resp.status_code != 200:
+        return 'Failed to exchange authorization code', 400
+
+    access_token = token_resp.json().get('access_token')
+    if not access_token:
+        return 'No access token returned', 400
+
+    # The token came directly from Google over TLS, so the userinfo it unlocks is trusted.
+    userinfo_resp = requests.get(
+        GOOGLE_USERINFO_ENDPOINT,
+        headers={'Authorization': f'Bearer {access_token}'},
+        timeout=10,
+    )
+    if userinfo_resp.status_code != 200:
+        return 'Failed to fetch user info', 400
+
+    email = (userinfo_resp.json().get('email') or '').lower()
+    if email not in ALLOWED_EMAILS:
+        return 'This Google account is not authorized for this tracker.', 403
+
+    session['email'] = email
+    session.permanent = True
+    return redirect(url_for('index'))
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('index'))
+
 
 @app.route('/health')
 def health_check():
@@ -230,10 +335,9 @@ def invalidate_cache():
     _cache_timestamp = 0
 
 @app.route('/api/toggle-day', methods=['POST'])
+@admin_required
 def toggle_day():
-    """Toggle the state of a specific day"""
-    from flask import request
-    
+    """Toggle the state of a specific day (requires an allowed Google account)"""
     try:
         data = request.get_json()
         date_str = data.get('date')
