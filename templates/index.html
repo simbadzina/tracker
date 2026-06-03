@@ -369,7 +369,7 @@
                         markedDays[dateStr] = result.status;
                     }
                     updateDayElement(dayElement, result.status);
-                    await loadStreakData(); // refresh streak number + success rate
+                    await refreshStreakStats(); // update counter/rate only — no calendar re-render
                 } else if (response.status === 401) {
                     // Session expired or not authorized — bounce to login
                     window.location.href = '/login';
@@ -378,6 +378,21 @@
                 }
             } catch (error) {
                 console.error('Error toggling day:', error);
+            }
+        }
+
+        // Refresh just the streak number + success rate after a toggle, leaving the
+        // calendar DOM untouched (the clicked cell is already updated) to avoid a full re-render flash.
+        async function refreshStreakStats() {
+            try {
+                const response = await fetch('/api/streak');
+                const data = await response.json();
+                currentStreak = data.current_streak;
+                document.getElementById('streakNumber').textContent = currentStreak;
+                updateStreakLabel();
+                document.getElementById('successRate').textContent = `${data.success_rate || 0}% Success Rate`;
+            } catch (error) {
+                console.error('Error refreshing streak stats:', error);
             }
         }
 
