@@ -31,31 +31,40 @@
 
         .streak-info {
             background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            padding: 30px;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            border-radius: 14px;
+            padding: 14px 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 40px;
+            flex-wrap: wrap;
+        }
+
+        .stat {
             text-align: center;
         }
 
-        .streak-number {
-            font-size: 4rem;
+        .stat-value {
+            display: block;
+            font-size: 2.1rem;
             font-weight: bold;
             color: #667eea;
-            margin-bottom: 10px;
+            line-height: 1.1;
         }
 
-        .streak-label {
-            font-size: 1.5rem;
-            color: #666;
-            margin-bottom: 10px;
-        }
-
-        .success-rate {
-            font-size: 1.2rem;
+        .stat-value.success {
             color: #4CAF50;
-            font-weight: 600;
-            margin-bottom: 20px;
+        }
+
+        .stat-name {
+            display: block;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #888;
+            margin-top: 2px;
         }
 
 
@@ -248,14 +257,10 @@
                 grid-template-columns: 1fr;
             }
             
-            .header h1 {
-                font-size: 2rem;
+            .stat-value {
+                font-size: 1.8rem;
             }
-            
-            .streak-number {
-                font-size: 3rem;
-            }
-            
+
             .month-card {
                 padding: 10px;
             }
@@ -267,9 +272,14 @@
 
 
         <div class="streak-info">
-            <div class="streak-number" id="streakNumber">0</div>
-            <div class="streak-label" id="streakLabel">Days Strong</div>
-            <div class="success-rate" id="successRate">0% Success Rate</div>
+            <div class="stat">
+                <span class="stat-value" id="streakNumber">0</span>
+                <span class="stat-name" id="streakLabel">Days Strong</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value success" id="successRate">0%</span>
+                <span class="stat-name">Success Rate</span>
+            </div>
         </div>
 
         <div class="calendar-container">
@@ -309,7 +319,7 @@
                 
                 // Update success rate
                 const successRate = streakData.success_rate || 0;
-                document.getElementById('successRate').textContent = `${successRate}% Success Rate`;
+                document.getElementById('successRate').textContent = `${successRate}%`;
                 
                 // Render calendar with progressive loading
                 await renderCalendarProgressive();
@@ -392,7 +402,7 @@
                 currentStreak = data.current_streak;
                 document.getElementById('streakNumber').textContent = currentStreak;
                 updateStreakLabel();
-                document.getElementById('successRate').textContent = `${data.success_rate || 0}% Success Rate`;
+                document.getElementById('successRate').textContent = `${data.success_rate || 0}%`;
             } catch (error) {
                 console.error('Error refreshing streak stats:', error);
             }
