@@ -35,6 +35,8 @@ COPY . .
 # Expose port
 EXPOSE $PORT
 
-# Run as root for simplicity (single user deployment)
-# Use single worker, minimal timeout, and no logging for fastest startup
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 10 --preload app:app
+# Run as root for simplicity (single user deployment).
+# One worker keeps the in-process cache coherent; threads give concurrency so a slow
+# DynamoDB call (cross-region) doesn't block other requests. Generous timeout so a cold
+# DynamoDB round-trip can't trip the worker kill.
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 60 --preload app:app

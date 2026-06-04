@@ -379,9 +379,16 @@ def toggle_day():
                 'updated_at': datetime.now().isoformat()
             })
         
-        # Invalidate cache after data modification
-        invalidate_cache()
-        
+        # Keep the in-memory cache warm by applying just this one change, so the follow-up
+        # stats refresh reads from cache instead of triggering a slow full DynamoDB re-scan.
+        global _cache_timestamp
+        cache = get_cached_marked_days()
+        if next_status == 'unmarked':
+            cache.pop(date_str, None)
+        else:
+            cache[date_str] = next_status
+        _cache_timestamp = datetime.now().timestamp()
+
         return jsonify({
             'date': date_str,
             'status': next_status,
