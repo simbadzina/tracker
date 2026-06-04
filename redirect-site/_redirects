@@ -1,0 +1,4 @@
+# Render static-site redirect rules (Netlify-style syntax).
+# Permanently send every path on chenesai.onrender.com to the Pi-hosted tracker,
+# preserving the path and query string via :splat.
+/*    https://simukira.duckdns.org/:splat    301
